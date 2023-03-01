@@ -1,77 +1,105 @@
+# Imports
+from os import getcwd
+import pandas as pd
 import itertools
 import numpy as np
 import matplotlib.pyplot as plt
-from backtest_run import backtest   
-from database_strategy_generator import *
-from os import getcwd
-import pandas as pd
+from mpl_toolkits.mplot3d import Axes3D
+from backtest_tool.backtest_analysis import *
+from backtest_tool.backtest_run import *
+from backtest_tool.database_strategy_generator import *
 
-trade_set={
-    "pairName" : "ETHUD",
-    "leverage" : 1,
-    "initialwallet" : 1000,
-    "makerFee" : 0.0002,
-    "takerFee" : 0.0007,
-    "SL_ratio" : 0.1,
-    "takeProfit" : 0.1,
-    "longLiquidationPrice" : 500000,
-    "shortLiquidationPrice" : 0,
-    }
+#Select here the strategie to test
+strategy_name = 'strategie_test'
+sm = __import__('Strategies.' + strategy_name, fromlist=['*'])
 
 # Load datas
 data_filepath = "ETHUSDT_1644595200000_1643072400000_1h.json"
+#data_filepath = "ETHUSDT_1678795200000_1677000000000_1h.json" # 1 year
 filepath = getcwd() + "\\data\\" + data_filepath
 
 
 
-df = dataframe_generator(filepath)
-
-
-param1_range = np.arange(1, 201, 10)
-param2_range = np.arange(1, 20, 1)
-
-def optimize_strategy(df, trade_set, *param):
-
-    # Generate all possible combinations of parameter values
-    param_combinations = list(itertools.product(*param))
+def optimize_strategy(filepath,strategy_name):
+    #Import strategie settings 
+    trade_set, param_combinations = sm.parameters()
+    combinations=len(param_combinations)
+    tested_combinations = 1
     # Initialize a list to store the backtest results for each parameter combination
     backtest_results = []
 
     # Test the strategy with each combination of parameter values
     for params in param_combinations:
-
-        indicators = [{'name': str(params[0]), 'func': ta.trend.sma_indicator, 'params': {'close': df['close'], 'window': params[1]}},
-                      {'name': str(params[1]), 'func': ta.momentum.stochrsi, 'params': {'close': df['close'], 'window': params[2],'smooth1': 3,'smooth2': 3}}]
-        df_n=indicator_gen(df, indicators)
-        print(df_n)
-        trades, data = backtest(df_n, trade_set)
-        backtest_results.append((params, data['wallet'],data['totalTrades'],data['AveragePercentagePositivTrades'],data['winRateRatio'],data['tradePerformance']))
+        df = dataframe_generator(filepath)
+        trade_set, trash = sm.parameters()
+        print("Testing paramameters: ", params, "    (", tested_combinations,"//",combinations,')')
+        
+        # # -- Clean and regenerate --
+        #df.drop(df.columns.difference(['open','high','low','close','volume']))
+        df.drop(df.columns.difference(['open','high','low','close','volume']), 1, inplace=True)
+        
+        df = sm.ndf_gen(df,params)
+        
+        # -- Backtest --
+        trades, data = backtest(df, trade_set,strategy_name)
+        
+        if data is False:
+            print("No trades")
+        else:
+            backtest_results.append((params, data['wallet'],data['totalTrades'],data['AveragePercentagePositivTrades'],data['winRateRatio'],data['tradesPerformance']))
+        tested_combinations += 1
+        
+       
 
     # Find the best parameter combination based on the backtest results
-    best_params, best_profit = max(backtest_results, key=lambda x: x[1])
+    result = max(backtest_results, key=lambda x: x[1])
 
-    print("Best parameters: ", best_params)
-    print("Best profit: ", best_profit)
-
-    # Create a heatmap of the parameter combinations and corresponding backtest results
-    param1_values = [x[0] for x in param_combinations]
-    param2_values = [x[1] for x in param_combinations]
-    profit_values = [x[1] for x in backtest_results]
-
-    param1_mesh, param2_mesh = np.meshgrid(param1_range, param2_range)
-    profit_mesh = np.array(profit_values).reshape(len(param2_range), len(param1_range))
-
-    fig, ax = plt.subplots()
-    heatmap = ax.pcolormesh(param1_mesh, param2_mesh, profit_mesh, cmap='YlOrRd')
-    fig.colorbar(heatmap, ax=ax)
-
-    ax.set_xlabel("Parameter 1")
-    ax.set_ylabel("Parameter 2")
-    ax.set_title("Backtest Results")
-
-    plt.show()
-
-    return best_params, backtest_results
+    
+    
+    return backtest_results,result 
 
 
-best_params, backtest_results = optimize_strategy(df, trade_set, param1_range, param2_range)
+#result = optimize_strategy(df, strategy_name)
+backtest_results,result = optimize_strategy(filepath, strategy_name)
+print(f"Best result {result} \n \n")
+
+# for x in range(backtest_results):
+#    print(x)
+
+# Split the data into separate lists for x, y, and z values
+x_values = [data[0][0] for data in backtest_results]
+y_values = [data[0][1] for data in backtest_results]
+z_values = [data[1] for data in backtest_results]
+
+# Create the 3D plot
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.scatter(x_values, y_values, z_values)
+
+# Set the axis labels and title
+ax.set_xlabel('Parameter 1')
+ax.set_ylabel('Parameter 2')
+ax.set_zlabel('Backtest Result')
+ax.set_title('Backtest Results')
+
+# Display the plot
+plt.show()
+
+# # Split the data into separate lists for x, y, and z values
+# x_values = [data[0][1] for data in backtest_results]
+# y_values = [data[0][2] for data in backtest_results]
+# z_values = [data[1] for data in backtest_results]
+
+# # Create the 3D plot
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
+# ax.scatter(x_values, y_values, z_values)
+
+# # Set the axis labels and title
+# ax.set_xlabel('Parameter 2')
+# ax.set_ylabel('Parameter 3')
+# ax.set_zlabel('Backtest Result')
+# ax.set_title('Backtest Results')
+
+# # Display the plot
+# plt.show()
