@@ -1,27 +1,30 @@
 import pandas as pd
-from database_strategy_generator import *
-from backtest_run import backtest
-from backtest_analysis import analysis_backtest
+from backtest_tool.backtest_analysis import *
+from backtest_tool.backtest_run import *
+from backtest_tool.database_strategy_generator import *
 from os import getcwd
 
-trade_set={
-    "pairName" : "ETHUD",
-    "leverage" : 1,
-    "initialwallet" : 1000,
-    "makerFee" : 0.0002,
-    "takerFee" : 0.0007,
-    "SL_ratio" : 0.1,
-    "takeProfit" : 0.1,
-    "longLiquidationPrice" : 500000,
-    "shortLiquidationPrice" : 0,
-    }
+strategy_name =  'strategie_name'
+
+
+sm = __import__('Strategies.' + strategy_name, fromlist=['*'])
+trade_set, param_combinations = sm.parameters()
 
 #Path to the datas
-data_filepath = "ETHUSDT_1644595200000_1643072400000_1h.json"
+data_filepath = "ETHUSDT_1678795200000_1677000000000_1h.json" # 1 year
+#data_filepath = "ETHUSDT_1644595200000_1643072400000_1h.json" # 1 month
 filepath = getcwd() + "\\data\\" + data_filepath
+
 
 # Generate dataframe
 df = dataframe_generator(filepath)
 df = indicator_gen(df)
-dt,data = backtest(df,trade_set)
-analysis_backtest(df,dt,data)
+# df.drop(df.columns.difference(['open','high','low','close','volume','RSI','Buy Signal','Sell Signal','MACD_DIFF']), 1, inplace=True)
+
+
+dt,data = backtest(df,trade_set,strategy_name)
+
+if data is False:
+    print("No trades")
+else:
+    analysis_backtest(df,dt,data)
